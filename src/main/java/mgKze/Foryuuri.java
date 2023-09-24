@@ -1,5 +1,6 @@
 package mgKze;
 
+import cn.hutool.core.img.ImgUtil;
 import cn.hutool.extra.emoji.EmojiUtil;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
@@ -21,9 +22,11 @@ import org.jsoup.nodes.Element;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.math.BigDecimal;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLEncoder;
 import java.sql.SQLException;
 import java.util.*;
 
@@ -89,7 +92,8 @@ public final class Foryuuri extends JavaPlugin {
                         "/meow 发出猫猫图\n" +
                         //"/loafoftheday 今日猫猫面包\n" +
                         "/s 搜mcmod 可能搜不到哦\n" +
-                        "解析b站链接";
+                        "解析b站链接\n" +
+                        "emoji合成";
                 event.getSubject().sendMessage(help);
             }
             else if(sentence.equals("/helpadmin")){
@@ -272,20 +276,42 @@ public final class Foryuuri extends JavaPlugin {
             }
             else if(EmojiUtil.containsEmoji(sentence)){
                 List<String> emojis = EmojiUtil.extractEmojis(sentence);
-                //可以直接请求到json就用okhttp+fastjson 要从html里提就用jsoup
-                try {
-                    System.out.println(emojis.get(0) + " " + emojis.get(1));
-                    String emojiKitchenUrl = "https://emoji.supply/kitchen/?" + emojis.get(0) + "+" + emojis.get(1);
-                    System.out.println(emojiKitchenUrl);
-                    Document doc = Jsoup.connect(emojiKitchenUrl).get();
-                    Element emojiElement = doc.getElementById("pc");
-                    System.out.println(emojiElement.toString());
-                    String emojiImgUrl = emojiElement.attr("src");
-                    System.out.println(emojiImgUrl);
-                    Image emojiImage = getImageFrom(emojiImgUrl, event.getGroup());
-                    event.getSubject().sendMessage(emojiImage);
-                } catch (IOException e) {
-                    e.printStackTrace();
+                ForwardMessageBuilder builder = new ForwardMessageBuilder(event.getGroup());
+                //可以直接请求到json就用okhttp+fastjson 要从html里提就用jsoup 20201001 20210218 20230803
+                if(emojis.size() == 2){
+                    String[] dates = {"20201001", "20210218", "20211115", "20230803"};
+                    Image emojiImage = null;
+                    ForwardMessage forwardMessage = null;
+                    for(int i = 0; i < dates.length; i++){
+                        String emojiKitchenUrl = "https://www.gstatic.com/android/keyboard/emojikitchen/" + dates[i];
+                        String emoji1 = EmojiUtil.toHtmlHex(emojis.get(0)).toString().replace("&#x", "u").replace(";", "");
+                        String emoji2 = EmojiUtil.toHtmlHex(emojis.get(1)).toString().replace("&#x", "u").replace(";", "");
+                        String url = emojiKitchenUrl + "/" + emoji1 + "/" + emoji1 + "_" + emoji2 + ".png";
+                        String url2 = emojiKitchenUrl + "/" + emoji2 + "/" + emoji2 + "_" + emoji1 + ".png";
+                        try {
+                            emojiImage = getImageFrom(url, event.getGroup());
+                        } catch (IOException e) {
+                            try {
+                                emojiImage = getImageFrom(url2, event.getGroup());
+                            }
+                            catch (IOException e2){
+                                e2.printStackTrace();
+                            }
+                        }
+                        if(emojiImage == null){
+                            continue;
+                        }
+                        else {
+                            forwardMessage = builder
+                                    .add(3473158948L, "Yuuri", new PlainText("emoji合成完毕~"))
+                                    .add(3473158948L, "Yuuri", emojiImage)
+                                    .build();
+                            break;
+                        }
+                    }
+                    if(forwardMessage != null){
+                        event.getSubject().sendMessage(forwardMessage);
+                    }
                 }
             }
         });
@@ -750,6 +776,16 @@ public final class Foryuuri extends JavaPlugin {
         conn.setRequestMethod("GET");
         conn.setConnectTimeout(5 * 1000);
         InputStream inputStream = conn.getInputStream();
+        img = Contact.uploadImage(contact, inputStream);
+        return img;
+    }
+
+    public static Image getImageFrom(String imageContent, Contact contact, float scale) throws IOException{
+        Image img = null;
+        URL url = new URL(imageContent);
+        java.awt.Image image = ImgUtil.getImage(url);
+        image = ImgUtil.scale(image, scale);
+        InputStream inputStream = ImgUtil.toStream(image, "jpeg");
         img = Contact.uploadImage(contact, inputStream);
         return img;
     }
